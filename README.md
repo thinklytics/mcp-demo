@@ -256,4 +256,3 @@ If the issue persists, check the [official MCP Python SDK repository](https://gi
 ## License
 
 This project is provided as an example implementation and is available under the MIT License.
-# mcp-demo
