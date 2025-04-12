@@ -5,9 +5,9 @@ This demonstration project shows how to implement a Model Context Protocol (MCP)
 ## Features
 
 - MCP server with tool and resource support
-- Vector-based RAG implementation using ChromaDB
+- RAG implementation (with fallback to in-memory storage)
 - Client example for interacting with the MCP server
-- Persistent knowledge base storage
+- Support for both SSE (HTTP) and stdio communication modes
 - Simple prompt templates
 
 ## Prerequisites
@@ -21,14 +21,14 @@ This demonstration project shows how to implement a Model Context Protocol (MCP)
 
 ```bash
 git clone <repository-url>
-cd demo
+cd mcp-demo
 ```
 
 2. Create a virtual environment:
 
 ```bash
 python -m venv mcp-env
-source mcp-env/bin/activate
+source mcp-env/bin/activate  # On Windows: mcp-env\Scripts\activate
 ```
 
 3. Install the required dependencies:
@@ -37,23 +37,14 @@ source mcp-env/bin/activate
 pip install -r requirements.txt
 ```
 
-4. Verify the installation:
-
-```bash
-python test_installation.py
-```
-
-This will check that all required dependencies are correctly installed.
-
 ## Project Structure
 
 ```
-demo/
+mcp-demo/
 ├── server.py           # Main MCP server implementation
 ├── client_example.py   # Example client to interact with the server
 ├── requirements.txt    # Project dependencies
 ├── sample_data.txt     # Sample data available as a resource
-├── test_installation.py # Script to verify dependencies
 ├── tools/
 │   ├── __init__.py     # Package initialization
 │   └── rag_tools.py    # RAG tools implementation
@@ -64,60 +55,67 @@ demo/
 
 ### Step 1: Start the MCP Server
 
-First, you need to start the MCP server. You have two options:
+You can run the MCP server in two different modes:
 
-#### Option A: Direct Python Execution (for development)
+#### Option A: SSE (HTTP) Mode
 
-```bash
-python server.py
-```
-
-This will start the server directly using the FastMCP built-in server.
-
-#### Option B: Using Uvicorn (for better performance)
+This mode allows the server to accept connections over HTTP using Server-Sent Events (SSE):
 
 ```bash
-uvicorn server:mcp.sse_app --host 0.0.0.0 --port 8000
+python server.py --sse
 ```
 
-This will start an ASGI server using Uvicorn for better performance and stability.
+By default, the server will listen on `0.0.0.0:8000`. You can customize the host and port:
 
-You should see output indicating that the server has started successfully, including:
-- Confirmation that the MCP server instance was created
-- Registration of basic tools and prompts
-- Creation or loading of the ChromaDB collection
-- A final message indicating the server is running
+```bash
+python server.py --sse --host 127.0.0.1 --port 9000
+```
+
+#### Option B: stdio Mode
+
+This mode allows the server to communicate through standard input/output:
+
+```bash
+python server.py --stdio
+```
 
 ### Step 2: Run the Client Example
 
 After the server is up and running, open a new terminal window (keeping the server running in the first one):
 
+#### Connecting to an SSE Server
+
 ```bash
 # Make sure your virtual environment is activated
-source mcp-env/bin/activate
+source mcp-env/bin/activate  # On Windows: mcp-env\Scripts\activate
 
-# Run the client
-python client_example.py
-```
-
-The client will:
-1. Connect to the server at http://localhost:8000/sse
-2. List available tools, resources, and prompts
-3. Execute various operations including:
-   - Retrieving prompt templates
-   - Adding documents to the knowledge base
-   - Searching for information using the RAG system
-   - Accessing resources
-
-#### Specifying a Custom Server URL
-
-If your server is running on a different host or port, you can specify the URL:
-
-```bash
-python client_example.py --server http://custom-host:port
+# Run the client with SSE mode
+python client_example.py --sse http://localhost:8000
 ```
 
 The client will automatically append "/sse" to the URL if it's not already present.
+
+#### Connecting via stdio
+
+```bash
+# Make sure your virtual environment is activated
+source mcp-env/bin/activate  # On Windows: mcp-env\Scripts\activate
+
+# Run the client with stdio mode
+python client_example.py --stdio --command python --args "server.py --stdio"
+```
+
+You can customize the command and arguments as needed.
+
+## What the Client Example Does
+
+The client example demonstrates several key operations:
+
+1. **Lists available tools, resources, and prompts** from the MCP server
+2. **Calls the echo tool** to verify basic communication
+3. **Adds documents to the knowledge base** with metadata
+4. **Searches the knowledge base** using the RAG system
+5. **Reads a sample resource** from the server
 
 ## Available MCP Tools
 
@@ -132,7 +130,6 @@ The following tools are available in this demo:
 ## Available MCP Resources
 
 - `sample://data`: Provides access to the sample data in sample_data.txt
-- `documents://all`: Provides access to all documents in the knowledge base
 
 ## Available MCP Prompts
 
@@ -177,10 +174,6 @@ def your_prompt_name(param1: str, param2: str) -> str:
     """
 ```
 
-## Integrating with AI Models
-
-This MCP server can be integrated with AI models through the MCP protocol. The client example demonstrates how to establish the connection and interact with the server programmatically.
-
 ## Troubleshooting
 
 ### Client Connection Issues
@@ -190,7 +183,7 @@ If you get a "Connection refused" error when running the client:
 1. Make sure the server is actually running in another terminal window
 2. Check that you're using the correct URL (default is http://localhost:8000)
 3. Ensure the server is listening on the expected interface (0.0.0.0 to accept external connections)
-4. Try specifying the server URL explicitly: `python client_example.py --server http://localhost:8000`
+4. Try specifying the server URL explicitly: `python client_example.py --sse http://localhost:8000`
 
 ### Server Endpoint Issues
 
@@ -199,60 +192,129 @@ The MCP server exposes an SSE (Server-Sent Events) endpoint at `/sse`. When conn
 - The full URL should be `http://localhost:8000/sse`
 - The client will automatically append `/sse` if it's missing from your specified URL
 
-### ChromaDB Issues
+### Debug Mode
 
-- ChromaDB will create a `chroma_db` directory to store embeddings and document data
-- You can delete this directory to start with a fresh database: `rm -rf ./chroma_db`
-- Check the server logs for any ChromaDB-related errors
+If you encounter issues, you can enable debug mode for more verbose output:
+
+```bash
+python client_example.py --sse http://localhost:8000 --debug
+```
 
 ### Common Issues
 
-**ChromaDB collection already exists error**
-
-If you see an error like this when starting the server:
-
-```
-chromadb.errors.InternalError: Collection [documents] already exists
-```
-
-It means that ChromaDB is trying to create a collection that already exists. In our latest version, this should be handled automatically. If you still encounter this error, you can:
-
-1. Delete the ChromaDB database and start fresh:
-   ```bash
-   rm -rf ./chroma_db
-   ```
-
-2. Or modify the `tools/rag_tools.py` file to properly handle both `ValueError` and `InternalError` exceptions when creating the collection.
-
 **Import errors with client connection**
 
-If you see import errors when running the client example, make sure to use the correct imports for the SSE client:
+If you see import errors when running the client example, make sure you have installed all the required dependencies:
 
-```python
-from mcp.client.session import ClientSession
-from mcp.client.sse import sse_client
-
-# Then connect like this:
-async with sse_client("http://localhost:8000/sse") as streams:
-    async with ClientSession(streams[0], streams[1]) as session:
-        await session.initialize()
-        # Your code here
+```bash
+pip install mcp-sdk
 ```
-
-Note that the SSE endpoint URL should end with `/sse` (e.g., `http://localhost:8000/sse`).
 
 **Package not found or version mismatch**
 
 If you're experiencing import errors or version compatibility issues, try installing a specific version of the MCP package:
 
 ```bash
-pip install mcp>=1.0.0
+pip install mcp-sdk>=1.0.0
 ```
-
-Note that the package name is simply `mcp`, not `mcp-sdk`.
-
-If the issue persists, check the [official MCP Python SDK repository](https://github.com/modelcontextprotocol/python-sdk) for the latest installation instructions.
 
 ## License
 
 This project is provided as an example implementation and is available under the MIT License.
+
+## Setup
+
+1. Install the required dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Create a `.env` file:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Edit the `.env` file and add your OpenAI API key:
+   ```
+   OPENAI_API_KEY=your_api_key_here
+   ```
+
+   You can also configure other options in the `.env` file:
+   - `MCP_SERVER_URL`: The URL of the MCP server (default: http://localhost:3000)
+   - `DEBUG`: Enable debug mode (default: false)
+
+## Usage
+
+Run the demo with:
+
+```bash
+python openai_example.py
+```
+
+You can override the settings in the `.env` file by using command-line arguments:
+
+```bash
+python openai_example.py --api-key YOUR_API_KEY --server-url http://your-server-url
+```
+
+## Environment Variables
+
+The following environment variables can be set in the `.env` file:
+
+- `OPENAI_API_KEY`: Your OpenAI API key (required)
+- `MCP_SERVER_URL`: The URL of the MCP server (optional)
+- `DEBUG`: Enable debug mode (optional)
+
+## Command-line Arguments
+
+- `--api-key`: Your OpenAI API key (overrides the .env file)
+- `--server-url`: The URL of the MCP server (overrides the .env file)
+- `--debug`: Enable debug mode (overrides the .env file)
+
+# MCP OpenAI Example
+
+This example demonstrates how to use the Model Control Protocol (MCP) with OpenAI's API.
+
+## Setup
+
+1. Install the required dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+2. Create a `.env` file based on the `.env.example` template:
+   ```
+   cp .env.example .env
+   ```
+
+3. Edit the `.env` file and add your OpenAI API key:
+   ```
+   OPENAI_API_KEY=your_api_key_here
+   ```
+
+## Running the Example
+
+Run the example script:
+
+```
+python openai_example.py
+```
+
+You can also specify options directly:
+
+```
+python openai_example.py --api-key your_api_key_here --server-url http://localhost:3000 --debug
+```
+
+## What the Example Does
+
+1. Loads environment variables from the `.env` file
+2. Configures the OpenAI client with your API key
+3. Lists available models
+4. Creates a chat completion with a simple prompt
+
+## Environment Variables
+
+- `OPENAI_API_KEY`: Your OpenAI API key (required)
+- `MCP_SERVER_URL`: URL of the MCP server (optional, defaults to http://localhost:3000)
+- `DEBUG`: Enable debug logging (optional, defaults to false)

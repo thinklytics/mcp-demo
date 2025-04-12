@@ -6,6 +6,7 @@ This module defines Pydantic models for data exchange between the MCP server and
 
 from pydantic import BaseModel, Field, model_validator
 from typing import Dict, List, Optional, Union, Any
+from enum import Enum
 
 
 class DocumentMetadata(BaseModel):
@@ -57,6 +58,13 @@ class SearchResult(BaseModel):
     score: float = 0.0
 
 
+class DocumentStatus(str, Enum):
+    """Status of document operation"""
+    SUCCESS = "success"
+    ERROR = "error"
+    DUPLICATE = "duplicate"
+
+
 class AddDocumentRequest(BaseModel):
     """Request to add a document to the knowledge base"""
     content: str
@@ -75,7 +83,7 @@ class AddDocumentRequest(BaseModel):
 
 class AddDocumentResponse(BaseModel):
     """Response after adding a document to the knowledge base"""
-    status: str
+    status: DocumentStatus
     id: Optional[str] = None
     message: Optional[str] = None
 
